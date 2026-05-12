@@ -7,8 +7,8 @@ app.get('/catalog', async (req, res) => {
     try {
         const { category, subcategory, keyword, cursor, limit } = req.query;
 
-        // 1. Construir URL de búsqueda
         let url = `https://catalog.roblox.com/v1/search/items?limit=${limit || 30}&sortType=2`;
+
         if (category) url += `&category=${category}`;
         if (subcategory) url += `&subcategory=${subcategory}`;
         if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
@@ -19,12 +19,12 @@ app.get('/catalog', async (req, res) => {
         });
         const searchData = await searchRes.json();
 
-        // Error handling si la API de Roblox falla
         if (!searchData.data || searchData.data.length === 0) {
             return res.json({ items: [], nextPageCursor: null });
-        }
+        end
 
-        // 2. Obtener detalles de los items encontrados
+        -- Obtener detalles de cada item
+        const ids = searchData.data.map(i => i.id).join(',');
         const detailsRes = await fetch(`https://catalog.roblox.com/v1/catalog/items/details`, {
             method: 'POST',
             headers: {
@@ -36,16 +36,12 @@ app.get('/catalog', async (req, res) => {
                 items: searchData.data.map(i => ({ itemType: i.itemType, id: i.id }))
             })
         });
-        
         const detailsData = await detailsRes.json();
 
-        // 3. Formatear para que Roblox lo lea fácil
         const items = (detailsData.data || []).map(item => ({
             AssetId: item.id,
             Name: item.name,
             Price: item.price || 0,
-            // Agregamos el thumbnail directo para que el LocalScript no trabaje de más
-            Image: `rbxthumb://type=Asset&id=${item.id}&w=150&h=150`
         }));
 
         res.json({
@@ -54,11 +50,10 @@ app.get('/catalog', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Error en el proxy:", err);
         res.status(500).json({ error: err.message });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Proxy corriendo en http://localhost:${PORT}`);
+    console.log(`Proxy corriendo en puerto ${PORT}`);
 });
