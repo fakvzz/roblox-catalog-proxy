@@ -3,62 +3,85 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 1. Ruta de salud para evitar que Render se duerma
+app.get('/', (req, res) => {
+    res.send('Proxy de Catálogo Activo 🚀 - Funcionando 24/7');
+});
+
+// 2. Endpoint principal del Catálogo
 app.get('/catalog', async (req, res) => {
     try {
-        const { category, subcategory, keyword, cursor, limit } = req.query;
+        const { category, subcategory, keyword, cursor, limit, makeupType } = req.query;
 
-        // 1. Construir URL de búsqueda
+        // Construcción de la URL base de Roblox
+        // Usamos sortType 2 (Más favoritos) por defecto para que se vea bien
         let url = `https://catalog.roblox.com/v1/search/items?limit=${limit || 30}&sortType=2`;
+
+        // Aplicamos categorías y subcategorías reales
         if (category) url += `&category=${category}`;
         if (subcategory) url += `&subcategory=${subcategory}`;
-        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
-        if (cursor) url += `&cursor=${cursor}`;
-
-        const searchRes = await fetch(url, {
-            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-        });
-        const searchData = await searchRes.json();
-
-        // Error handling si la API de Roblox falla
-        if (!searchData.data || searchData.data.length === 0) {
-            return res.json({ items: [], nextPageCursor: null });
+        
+        // Manejo de búsqueda por palabra clave
+        let finalKeyword = keyword || "";
+        
+        // Lógica especial para Maquillaje (image_8211b3.png)
+        // Si el usuario elige una subcategoría de maquillaje, le inyectamos el filtro
+        if (makeupType && makeupType !== "Todos") {
+            finalKeyword = `${makeupType} ${finalKeyword}`.trim();
+        }
+        
+        if (finalKeyword) {
+            url += `&keyword=${encodeURIComponent(finalKeyword)}`;
         }
 
-        // 2. Obtener detalles de los items encontrados
-        const detailsRes = await fetch(`https://catalog.roblox.com/v1/catalog/items/details`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-            },
-            body: JSON.stringify({
-                items: searchData.data.map(i => ({ itemType: i.itemType, id: i.id }))
-            })
-        });
-        
-        const detailsData = await detailsRes.json();
+        if (cursor) {
+            url += `&cursor=${cursor}`;
+        }
 
-        // 3. Formatear para que Roblox lo lea fácil
-        const items = (detailsData.data || []).map(item => ({
+        // Petición a la API de Roblox
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        const data = await response.json();
+
+        // Si hay error en la API de Roblox
+        if (!data.data) {
+            return res.json({ items: [], nextCursor: null, error: "No se encontraron resultados" });
+        }
+
+        // Limpieza y mapeo de datos para que Roblox los lea fácil
+        const items = data.data.map(item => ({
             AssetId: item.id,
             Name: item.name,
             Price: item.price || 0,
-            // Agregamos el thumbnail directo para que el LocalScript no trabaje de más
+            // Enviamos el thumbnail ya pre-armado
             Image: `rbxthumb://type=Asset&id=${item.id}&w=150&h=150`
         }));
 
+        // Respuesta final al Script de Servidor en Roblox
         res.json({
             items: items,
-            nextPageCursor: searchData.nextPageCursor || null
+            nextCursor: data.nextPageCursor || null
         });
 
     } catch (err) {
-        console.error("Error en el proxy:", err);
-        res.status(500).json({ error: err.message });
+        console.error("Error en Proxy:", err);
+        res.status(500).json({ error: "Error interno del servidor proxy" });
     }
 });
 
+// 3. Sistema Auto-Ping (Para que no se duerma la instancia gratis de Render)
+// Se hace un ping a sí mismo cada 10 minutos
+setInterval(() => {
+    fetch(`http://localhost:${PORT}/`)
+        .then(() => console.log("Auto-ping exitoso para mantener despierto el proxy."))
+        .catch(err => console.log("Error en auto-ping:", err.message));
+}, 600000); 
+
 app.listen(PORT, () => {
-    console.log(`Proxy corriendo en http://localhost:${PORT}`);
+    console.log(`Proxy corriendo en puerto ${PORT}`);
 });
