@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send('Proxy de Facu Activo - Sistema de Precios Fixeado 🚀'));
+app.get('/', (req, res) => res.send('Proxy de Facuu Activo - Sistema de Precios Fixeado 🚀'));
 
 app.get('/catalog', async (req, res) => {
     try {
